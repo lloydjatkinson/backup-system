@@ -426,3 +426,29 @@ FodyWeavers.xsd
 
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
+
+# Terraform/OpenTofu
+# Local working directories
+.terraform/
+# State files
+*.tfstate
+*.tfstate.*
+!/infrastructure/terraform.tfstate
+# Variable files
+*.tfvars
+*.tfvars.json
+!/infrastructure/terraform.tfvars
+# Local overrides
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+# Saved plans
+*.tfplan
+# Temporary files
+.terraform.tfstate.lock.info
+crash.log
+crash.*.log
+# CLI configuration
+.terraformrc
+terraform.rc
