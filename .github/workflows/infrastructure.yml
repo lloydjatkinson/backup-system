@@ -19,7 +19,8 @@ concurrency:
   queue: max
 
 jobs:
-  deploy:
+  apply:
+    name: Apply Infrastructure
     runs-on: ubuntu-latest
 
     defaults:

@@ -1,0 +1,171 @@
+name: Infrastructure PR
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: infrastructure-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # Path filtering happens here rather than in the trigger, so a PR that
+  # doesn't touch infrastructure skips the plan job (which counts as passing)
+  # instead of leaving a required check pending forever.
+  changes:
+    name: Detect infrastructure changes
+    runs-on: ubuntu-latest
+    outputs:
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - name: Filter changed paths
+        id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          files=$(gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --name-only)
+          if grep -qE '^(infrastructure/|\.github/workflows/infrastructure-pr\.yml$)' <<< "$files"; then
+            echo "infra=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "infra=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  plan:
+    name: Plan infrastructure
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: infrastructure
+
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_state_passphrase: ${{ secrets.TF_VAR_STATE_PASSPHRASE }}
+      B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+      B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+
+    steps:
+      # Infrastructure changes from forks can't be planned (no secrets), so
+      # fail rather than skip: a skipped job would satisfy the required check
+      # without anything having been validated.
+      - name: Require trusted PR
+        id: trust
+        working-directory: .
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
+            echo "::error::Infrastructure changes from forks can't be planned. Recreate the change on a branch in this repository."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: 1.13.1
+          tofu_wrapper: false
+
+      - name: Check formatting
+        id: fmt
+        continue-on-error: true
+        run: tofu fmt -check
+
+      - name: Initialise
+        id: init
+        run: tofu init -input=false -lockfile=readonly
+
+      - name: Validate
+        id: validate
+        run: tofu validate
+
+      - name: Plan
+        id: plan
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          tofu plan -input=false -no-color -concise -json-into="$RUNNER_TEMP/plan.jsonl" 2>&1 \
+            | tee "$RUNNER_TEMP/plan.txt"
+
+      - name: Comment plan
+        if: ${{ !cancelled() && steps.trust.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          FMT: ${{ steps.fmt.outcome }}
+          INIT: ${{ steps.init.outcome }}
+          VALIDATE: ${{ steps.validate.outcome }}
+          PLAN: ${{ steps.plan.outcome }}
+        run: |
+          failed=""
+          for step in "Format:$FMT" "Init:$INIT" "Validate:$VALIDATE" "Plan:$PLAN"; do
+            if [[ "${step#*:}" == failure ]]; then
+              failed+="${failed:+, }${step%%:*}"
+            fi
+          done
+
+          if [[ -n "$failed" ]]; then
+            status="❌ Failed: $failed"
+          else
+            status="✅ Success"
+          fi
+
+          summary=""
+          if [[ "$PLAN" == success ]]; then
+            summary=$(jq -r 'select(.type == "change_summary") | ."@message"' "$RUNNER_TEMP/plan.jsonl" | tail -n1)
+          fi
+
+          plan_txt="$RUNNER_TEMP/plan.txt"
+          if [[ -f "$plan_txt" ]]; then
+            details=$(head -c 60000 "$plan_txt")
+            if (( $(wc -c < "$plan_txt") > 60000 )); then
+              details+=$'\n\n... Output truncated. See workflow logs.'
+            fi
+          else
+            details="Plan did not run. See workflow logs."
+          fi
+
+          cat > "$RUNNER_TEMP/comment.md" <<EOF
+          <!-- opentofu-plan -->
+          ### OpenTofu Plan
+
+          **Status:** $status
+
+          **Changes:** ${summary:-Unavailable}
+
+          <details>
+          <summary>View detailed plan</summary>
+
+          ~~~text
+          $details
+          ~~~
+
+          </details>
+          EOF
+
+          comment_id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- opentofu-plan -->"))) | .id' \
+            | head -n1)
+
+          if [[ -n "$comment_id" ]]; then
+            jq -n --rawfile body "$RUNNER_TEMP/comment.md" '{body: $body}' \
+              | gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" --input - > /dev/null
+          else
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+          fi
+
+      - name: Fail on errors
+        if: steps.fmt.outcome == 'failure' || steps.plan.outcome == 'failure'
+        run: exit 1
