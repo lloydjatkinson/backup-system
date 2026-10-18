@@ -1,0 +1,57 @@
+
+name: Infrastructure
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "infrastructure/**"
+      - ".github/workflows/infrastructure.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infrastructure
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: infrastructure
+
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_state_passphrase: ${{ secrets.TF_VAR_STATE_PASSPHRASE }}
+      B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+      B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: 1.13.1
+          tofu_wrapper: false
+
+      - name: Check formatting
+        run: tofu fmt -check
+
+      - name: Initialise
+        run: tofu init -input=false -lockfile=readonly
+
+      - name: Validate
+        run: tofu validate
+
+      - name: Plan
+        run: tofu plan -input=false -no-color
