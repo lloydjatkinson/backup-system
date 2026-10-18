@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: infrastructure
@@ -19,7 +19,7 @@ concurrency:
   queue: max
 
 jobs:
-  plan:
+  deploy:
     runs-on: ubuntu-latest
 
     defaults:
@@ -36,7 +36,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          persist-credentials: false
+          ref: master
 
       - name: Setup OpenTofu
         uses: opentofu/setup-opentofu@v2
@@ -55,3 +55,38 @@ jobs:
 
       - name: Plan
         run: tofu plan -input=false -no-color
+
+      - name: Apply
+        id: apply
+        run: tofu apply -input=false -auto-approve -no-color
+
+      - name: Verify encrypted state
+        id: state
+        if: ${{ !cancelled() && steps.apply.outcome != 'skipped' }}
+        run: |
+          jq -e 'has("encrypted_data") and has("encryption_version")' terraform.tfstate > /dev/null
+
+      - name: Preserve encrypted state
+        if: ${{ !cancelled() && steps.state.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: opentofu-state-${{ github.run_id }}-${{ github.run_attempt }}
+          path: infrastructure/terraform.tfstate
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Commit encrypted state
+        if: ${{ !cancelled() && steps.state.outcome == 'success' }}
+        run: |
+          git add terraform.tfstate
+
+          if git diff --cached --quiet; then
+            echo "No state changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git commit -m "chore(infrastructure): update OpenTofu state"
+          git push origin HEAD:master
