@@ -34,6 +34,17 @@ jobs:
             echo "infra=true" >> "$GITHUB_OUTPUT"
           else
             echo "infra=false" >> "$GITHUB_OUTPUT"
+
+            # If an earlier push left a plan comment, replace it so it doesn't
+            # describe changes this PR no longer makes.
+            comment_id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- opentofu-plan -->"))) | .id' \
+              | head -n1)
+
+            if [[ -n "$comment_id" ]]; then
+              jq -n '{body: "<!-- opentofu-plan -->\n### OpenTofu Plan\n\nNo infrastructure changes in this PR."}' \
+                | gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" --input - > /dev/null
+            fi
           fi
 
   plan:
