@@ -5,5 +5,10 @@ terraform {
       source  = "Backblaze/b2"
       version = "~> 0.14.0"
     }
+
+        random = {
+      source  = "hashicorp/random"
+      version = "~> 3.9"
+    }
   }
 }

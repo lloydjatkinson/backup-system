@@ -8,15 +8,17 @@ resource "b2_bucket" "backups" {
 }
 
 resource "b2_application_key" "restic" {
-  key_name   = "${local.name_prefix}-restic"
-  bucket_ids = [b2_bucket.backups.id]
+  for_each = local.machines
+
+  key_name    = "${local.name_prefix}-${each.key}-restic"
+  bucket_ids  = [b2_bucket.backups.id]
+  name_prefix = "${each.key}/"
 
   capabilities = [
     "listBuckets",
     "listAllBucketNames",
     "listFiles",
     "readFiles",
-    "writeFiles",
-    "deleteFiles"
+    "writeFiles"
   ]
 }
