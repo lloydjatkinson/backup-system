@@ -3,8 +3,4 @@ resource "random_password" "restic_repo" {
 
   length  = 32
   special = false
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }

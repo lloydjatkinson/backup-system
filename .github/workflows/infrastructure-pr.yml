@@ -14,9 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Path filtering happens here rather than in the trigger, so a PR that
-  # doesn't touch infrastructure skips the plan job (which counts as passing)
-  # instead of leaving a required check pending forever.
+  # Filter here, not in the trigger, so an unrelated PR skips plan (which counts
+  # as passing) instead of leaving a required check pending forever.
   changes:
     name: Detect infrastructure changes
     runs-on: ubuntu-latest
@@ -35,8 +34,7 @@ jobs:
           else
             echo "infra=false" >> "$GITHUB_OUTPUT"
 
-            # If an earlier push left a plan comment, replace it so it doesn't
-            # describe changes this PR no longer makes.
+            # Replace a stale plan comment from an earlier push.
             comment_id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
               --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- opentofu-plan -->"))) | .id' \
               | head -n1)
@@ -64,9 +62,8 @@ jobs:
       B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
 
     steps:
-      # Infrastructure changes from forks can't be planned (no secrets), so
-      # fail rather than skip: a skipped job would satisfy the required check
-      # without anything having been validated.
+      # Forks have no secrets, so fail rather than skip: a skipped job would
+      # satisfy the required check without validating anything.
       - name: Require trusted PR
         id: trust
         working-directory: .
@@ -74,7 +71,7 @@ jobs:
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           if [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
-            echo "::error::Infrastructure changes from forks can't be planned. Recreate the change on a branch in this repository."
+            echo "::error::Fork PRs can't be planned. Recreate the change on a branch in this repo."
             exit 1
           fi
 
