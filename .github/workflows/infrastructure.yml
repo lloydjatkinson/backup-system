@@ -41,6 +41,9 @@ jobs:
           tofu_version: 1.13.1
           tofu_wrapper: false
 
+      - name: Install restic
+        run: bash scripts/install-restic.sh
+
       - name: Check formatting
         run: tofu fmt -check
 
@@ -57,7 +60,7 @@ jobs:
         id: apply
         run: tofu apply -input=false -auto-approve -no-color
 
-      # Commit state BEFORE init, so a generated password can't outlive its commit.
+      # Persist state right after apply; the generated passwords live only in state.
       - name: Commit encrypted state
         id: commit_state
         if: ${{ !cancelled() && steps.apply.outcome != 'skipped' }}
@@ -83,10 +86,6 @@ jobs:
           echo "::error::state push failed; reconcile manually before re-running"
           exit 1
 
-      - name: Install restic
-        if: ${{ steps.apply.outcome == 'success' && steps.commit_state.outcome == 'success' }}
-        run: bash scripts/install-restic.sh
-
-      - name: Bootstrap added repositories
-        if: ${{ steps.apply.outcome == 'success' && steps.commit_state.outcome == 'success' }}
-        run: bash scripts/bootstrap-added.sh
+      - name: Verify repositories
+        if: ${{ steps.apply.outcome == 'success' }}
+        run: bash scripts/check-repos.sh

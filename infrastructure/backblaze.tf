@@ -1,3 +1,5 @@
+data "b2_account_info" "this" {}
+
 resource "b2_bucket" "backups" {
   bucket_name = "${local.family_prefix}-backups-b2"
   bucket_type = "allPrivate"
@@ -19,6 +21,6 @@ resource "b2_application_key" "restic_b2" {
     "listAllBucketNames",
     "listFiles",
     "readFiles",
-    "writeFiles"
+    "writeFiles",
   ]
 }
