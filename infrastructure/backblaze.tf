@@ -4,6 +4,10 @@ resource "b2_bucket" "backups" {
   bucket_name = "${local.family_prefix}-backups"
   bucket_type = "allPrivate"
 
+  file_lock_configuration {
+    is_file_lock_enabled = false
+  }
+
   lifecycle {
     prevent_destroy = true
   }
