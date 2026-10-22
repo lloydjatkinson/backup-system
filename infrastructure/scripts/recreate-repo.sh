@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Recreate ONE repo after the check has flagged it missing and you've confirmed
-# it's genuinely gone. The remade repo is EMPTY; old snapshots are not recovered.
+# Recreate ONE repo after the check flagged it missing and you've confirmed it's
+# genuinely gone. The remade repo is EMPTY; old snapshots are not recovered.
 # Run from infrastructure/. Needs tofu, restic and bash on PATH.
 #
 # Usage: ./recreate-repo.sh lloyd-desktop/b2

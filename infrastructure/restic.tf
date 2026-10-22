@@ -5,10 +5,13 @@ resource "random_password" "restic_repo" {
   special = false
 }
 
-# Inits each repo once, on create. A repo that later vanishes is not recreated;
-# use scripts/recreate-repo.sh to make one again.
+# Inits each repo on create, and again if its repository URL changes (bucket or
+# region). A vanished repo doesn't change the URL, so it's not silently recreated;
+# use scripts/recreate-repo.sh for that.
 resource "terraform_data" "restic_init" {
   for_each = local.repo_pairs
+
+  triggers_replace = each.value.repository
 
   provisioner "local-exec" {
     interpreter = ["bash", "-c"]
