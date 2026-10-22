@@ -9,7 +9,7 @@ resource "random_password" "restic_repo" {
 # region). A vanished repo doesn't change the URL, so it's not silently recreated;
 # use scripts/recreate-repo.sh for that.
 resource "terraform_data" "restic_init" {
-  for_each = local.repo_pairs
+  for_each = local.repository_pairs
 
   triggers_replace = each.value.repository
 

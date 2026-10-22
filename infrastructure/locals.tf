@@ -31,7 +31,7 @@ locals {
     }
   }
 
-  repo_pairs = merge([
+  repository_pairs = merge([
     for machine, machine_config in local.repositories : {
       for destination, destination_config in machine_config.destinations : "${machine}/${destination}" => {
         repository = destination_config.repository
