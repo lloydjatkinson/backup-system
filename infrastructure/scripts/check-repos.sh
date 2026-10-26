@@ -11,10 +11,7 @@ while IFS= read -r row; do
   repo="$(jq -r '.repository' <<<"$row")"
   password="$(jq -r '.password' <<<"$row")"
 
-  env_args=()
-  while IFS= read -r kv; do
-    env_args+=("$kv")
-  done < <(jq -r '.env | to_entries[] | "\(.key)=\(.value)"' <<<"$row")
+  mapfile -t env_args < <(jq -r '.env | to_entries[] | "\(.key)=\(.value)"' <<<"$row")
 
   if env "${env_args[@]}" RESTIC_REPOSITORY="$repo" RESTIC_PASSWORD="$password" \
     restic cat config >/dev/null 2>&1; then

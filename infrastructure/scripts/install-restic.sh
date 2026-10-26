@@ -8,9 +8,18 @@ url="https://github.com/restic/restic/releases/download/v${version}/restic_${ver
 
 dir="$HOME/.local/bin"
 mkdir -p "$dir"
-curl -fsSL "$url" -o "$dir/restic.bz2"
-echo "${sha256}  ${dir}/restic.bz2" | sha256sum -c -
-bunzip2 -f "$dir/restic.bz2"
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "$url" -o "$tmp/restic.bz2"
+echo "${sha256}  ${tmp}/restic.bz2" | sha256sum -c -
+bunzip2 -f "$tmp/restic.bz2"
+cp "$tmp/restic" "$dir/restic"
 chmod +x "$dir/restic"
-echo "$dir" >>"$GITHUB_PATH"
-"$dir/restic" version
+
+if [[ -n "${GITHUB_PATH:-}" ]]; then
+  echo "$dir" >>"$GITHUB_PATH"
+fi
+
+echo "installed $("$dir/restic" version)"

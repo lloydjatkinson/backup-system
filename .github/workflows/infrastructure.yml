@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: master
-          fetch-depth: 2
+          fetch-depth: 0 # Full history: the state-push retry below rebases onto master.
 
       - name: Setup OpenTofu
         uses: opentofu/setup-opentofu@v2
